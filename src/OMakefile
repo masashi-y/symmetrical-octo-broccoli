@@ -18,6 +18,7 @@ FILES[] =
 # ocamlfind で探して使うパッケージ
 OCAMLPACKS[] =
    str
+   ppx_monadic
    # menhir
 # camlp4 プリプロセッサを使うことを omake に伝える
 # OCAMLFINDFLAGS = -syntax camlp4o

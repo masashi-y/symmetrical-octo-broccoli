@@ -1,6 +1,6 @@
 %{
 open Logic
-open Logic.Term
+open Logic.AST
 %}
 
 %token TRUE FALSE
@@ -11,7 +11,7 @@ open Logic.Term
 %token LPAREN RPAREN
 %token EOF
 %token <string> VAR
-%start <Logic.Term.t> main
+%start <Logic.AST.t> main
 
 %%
 
@@ -47,13 +47,13 @@ expr0 :
 | f=func xs=args            { List.fold_left (fun f x -> App (f, x)) f xs }
 | TRUE                     { True }
 | FALSE                    { False }
-| x=VAR                    { Var x }
+| x=VAR                    { Term x }
 | NEG e=expr0              { Not e }
 | LPAREN e=expr RPAREN     { e }
 
 func :
 | LPAREN e=lambda RPAREN { e }
-| f=VAR     { Var f }
+| f=VAR     { Term f }
 
 args :
 | LPAREN xs=separated_list(COMMA, expr) RPAREN     { xs }
