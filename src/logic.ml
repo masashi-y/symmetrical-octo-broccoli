@@ -54,6 +54,7 @@ end = struct
             hd >>= fun hd ->
             put s >>= fun () ->
             sequence' rest >>= fun rest ->
+            put s >>= fun () ->
             return (hd :: rest)
 
     let run (State m) a = m a
