@@ -8,7 +8,10 @@ let main () =
   let filebuf = Lexing.from_string str in
   print_endline str;
   try
-    print_endline (AST.show (Parser.main Lexer.token filebuf))
+      let ast = Parser.main Lexer.token filebuf in
+    print_endline (Term.show (Term.from_AST ast));
+    print_endline "";
+  print_endline (AST.show ast)
   with
   | Lexer.Error msg ->
       Printf.eprintf "%s%!" msg
@@ -16,6 +19,7 @@ let main () =
       Printf.eprintf "At offset %d: syntax error.\n%!" (Lexing.lexeme_start filebuf)
 
 let _ = main ()
+(*
 let () =
     let open AST in
     let filebuf = Lexing.from_string "~(exists e. eat(e) & (exists x. x = taro & Subj(e) = x))" in
@@ -24,3 +28,4 @@ let () =
     let test = Imp (test, test1) in
     print_endline (show test);
     print_endline (Term.show (Term.from_AST test));
+    *)

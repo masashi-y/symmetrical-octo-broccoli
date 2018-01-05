@@ -1,6 +1,8 @@
 %{
 open Logic
 open Logic.AST
+
+let mkApp f xs = List.fold_left (fun f x -> App (f, x)) f xs
 %}
 
 %token TRUE FALSE
@@ -19,12 +21,18 @@ main : e=expr EOF          { e }
 expr : e=expr6             { e }
 
 lambda :
-| LAMBDA xs=nonempty_list(VAR) PERIOD e=expr6 { List.fold_right (fun v b -> Lambda (v, b)) xs e }
+| LAMBDA xs=nonempty_list(VAR) PERIOD e=expr6
+    { List.fold_right (fun v b -> Lambda (v, b)) xs e }
 
 expr6 :
-| e=lambda                     { e }
-| FORALL x=VAR PERIOD e=expr6  { Forall (x, e) }
-| EXISTS x=VAR PERIOD e=expr6  { Exists (x, e) }
+| e=lambda { e }
+| e=expr5  { e }
+
+expr5 :
+| n=option(NEG) FORALL x=VAR PERIOD e=expr5
+    { match n with Some _ -> Not (Forall (x, e)) | None -> Forall (x, e) }
+| n=option(NEG) EXISTS x=VAR PERIOD e=expr5
+    { match n with Some _ -> Not (Exists (x, e)) | None -> Exists (x, e) }
 | e=expr4                     { e }
                            
 expr4 :
@@ -44,18 +52,20 @@ expr1 :
 | e=expr0                  { e }
 
 expr0 :
-| f=func xs=args            { List.fold_left (fun f x -> App (f, x)) f xs }
 | TRUE                     { True }
 | FALSE                    { False }
-| x=VAR                    { Term x }
 | NEG e=expr0              { Not e }
-| LPAREN e=expr RPAREN     { e }
+| f=term xs=option(args)
+    { match xs with Some xs -> mkApp f xs | None -> f }
+| LPAREN f=lambda RPAREN xs=option(args)
+    { match xs with Some xs -> mkApp f xs | None -> f }
+| LPAREN e=expr5 RPAREN    { e }
 
-func :
-| LPAREN e=lambda RPAREN { e }
+term :
 | f=VAR     { Term f }
 
 args :
-| LPAREN xs=separated_list(COMMA, expr) RPAREN     { xs }
+| e=term { [e] }
+| LPAREN xs=separated_nonempty_list(COMMA, expr) RPAREN     { xs }
 
 %%

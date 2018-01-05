@@ -16,7 +16,10 @@ module StateM : sig
     type ('a, 'b) t
     val bind : ('a, 'c) t -> ('a -> ('b, 'c) t) -> ('b, 'c) t
     val (>>=) : ('a, 'c) t -> ('a -> ('b, 'c) t) -> ('b, 'c) t
+
+    (* these two functions does not pass state transitions *)
     val (&&&) : ('a -> ('b, 'c) t) -> ('e -> ('d, 'c) t) -> (('a * 'e) -> (('b * 'd), 'c) t)
+    val sequence' : ('a, 'b) t list -> ('a list, 'b) t
 
     val return : 'a -> ('a, 'b) t
 
@@ -37,12 +40,21 @@ end = struct
     let get = State (fun s -> (s, s))
     let put s = State (fun _ -> ((), s))
 
-    let (&&&) f1 f2 (t1, t2) = get >>= (fun s ->
-        f1 t1 >>= (fun r1 ->
-        put s >>= (fun () ->
-        f2 t2 >>= (fun r2 ->
-        put s >>= (fun () ->
-        return (r1, r2))))))
+    let (&&&) f1 f2 (t1, t2) = get >>= fun s ->
+        f1 t1 >>= fun r1 ->
+        put s >>= fun () ->
+        f2 t2 >>= fun r2 ->
+        put s >>= fun () ->
+        return (r1, r2)
+
+    let rec sequence' = function
+        | [] -> return []
+        | hd :: rest -> 
+            get >>= fun s ->
+            hd >>= fun hd ->
+            put s >>= fun () ->
+            sequence' rest >>= fun rest ->
+            return (hd :: rest)
 
     let run (State m) a = m a
     let eval m a = fst (run m a)
@@ -106,6 +118,22 @@ module Term = struct
            | Exists of (t * Type.t option)
            | Forall of (t * Type.t option)
 
+    let get_args = 
+        let rec aux args = function
+        | App (xs, x) -> aux (x :: args) xs
+        | f -> (f, args)
+        in function
+        | App (_, _) as f -> aux [] f
+        | _ -> invalid_arg ("get_args expects an App as input")
+
+    let get_lambda_vars = 
+        let rec aux vars = function
+        | Lambda (t, ty) -> aux (ty :: vars) t
+        | t -> (t, vars) (* vars are in reverse order (lower one comes first) *)
+        in function
+        | Lambda (_, _) as f -> aux [] f
+        | _ -> invalid_arg ("get_lambda_vars expects an Lambda as input")
+
     let put_cons i = StateM.(get >>=
         fun lst -> put (i :: lst))
 
@@ -114,41 +142,41 @@ module Term = struct
         | AST.True  -> return True
         | AST.False -> return False
         | AST.Term s -> do_
-                ; lst <-- get
-                ; (try let i = List.index s lst in
-                    return @@ Var i
-                with Not_found ->
-                    return @@ Const s)
+            ; lst <-- get
+            ; (try let i = List.index s lst in
+                return @@ Var i
+            with Not_found ->
+                return @@ Const s)
         | AST.Not t -> do_
-                ; t' <-- f t
-                ; return @@ Not t'
+            ; t' <-- f t
+            ; return @@ Not t'
         | AST.Equal (t1, t2) -> do_
-                ; (t1', t2') <-- (f &&& f) (t1, t2)
-                ; return @@ Equal (t1', t2')
+            ; (t1', t2') <-- (f &&& f) (t1, t2)
+            ; return @@ Equal (t1', t2')
         | AST.And (t1, t2) -> do_
-                ; (t1', t2') <-- (f &&& f) (t1, t2)
-                ; return @@ And (t1', t2')
+            ; (t1', t2') <-- (f &&& f) (t1, t2)
+            ; return @@ And (t1', t2')
         | AST.Or (t1, t2) -> do_
-                ; (t1', t2') <-- (f &&& f) (t1, t2)
-                ; return @@ Or (t1', t2')
+            ; (t1', t2') <-- (f &&& f) (t1, t2)
+            ; return @@ Or (t1', t2')
         | AST.Imp (t1, t2) -> do_
-                ; (t1', t2') <-- (f &&& f) (t1, t2)
-                ; return @@ Imp (t1', t2')
+            ; (t1', t2') <-- (f &&& f) (t1, t2)
+            ; return @@ Imp (t1', t2')
         | AST.App (t1, t2) -> do_
-                ; (t1', t2') <-- (f &&& f) (t1, t2)
-                ; return @@ App (t1', t2')
+            ; (t1', t2') <-- (f &&& f) (t1, t2)
+            ; return @@ App (t1', t2')
         | AST.Lambda (v, t) -> do_
-                ; put_cons v
-                ; t' <-- f t
-                ; return @@ Lambda (t', Type.resolve_atomic v)
+            ; put_cons v
+            ; t' <-- f t
+            ; return @@ Lambda (t', Type.resolve_atomic v)
         | AST.Exists (v, t) -> do_
-                ; put_cons v
-                ; t' <-- f t
-                ; return @@ Exists (t', Type.resolve_atomic v)
+            ; put_cons v
+            ; t' <-- f t
+            ; return @@ Exists (t', Type.resolve_atomic v)
         | AST.Forall (v, t) -> do_
-                ; put_cons v
-                ; t' <-- f t
-                ; return @@ Forall (t', Type.resolve_atomic v)
+            ; put_cons v
+            ; t' <-- f t
+            ; return @@ Forall (t', Type.resolve_atomic v)
         )
         in StateM.eval (f t) []
 
@@ -165,44 +193,42 @@ module Term = struct
         | True  -> return "True"
         | False -> return "False"
         | Var v -> do_
-                ; lst <-- get
-                ; return (List.nth lst v)
+            ; lst <-- get
+            ; return (List.nth lst v)
         | Const s -> return s
         | Not t -> do_
-                ; t' <-- f t
-                ; return @@ !%"~(%s)" t'
+            ; t' <-- f t
+            ; return @@ !%"~(%s)" t'
         | Equal (t1, t2) -> do_
-                ; (t1', t2') <-- (f &&& f) (t1, t2)
-                ; return @@ !%"%s = %s" t1' t2'
+            ; (t1', t2') <-- (f &&& f) (t1, t2)
+            ; return @@ !%"%s = %s" t1' t2'
         | And (t1, t2) -> do_
-                ; (t1', t2') <-- (f &&& f) (t1, t2)
-                ; return @@ !%"(%s /\\ %s)" t1' t2'
+            ; (t1', t2') <-- (f &&& f) (t1, t2)
+            ; return @@ !%"(%s /\\ %s)" t1' t2'
         | Or (t1, t2) -> do_
-                ; (t1', t2') <-- (f &&& f) (t1, t2)
-                ; return @@ !%"(%s \\/ %s)" t1' t2'
+            ; (t1', t2') <-- (f &&& f) (t1, t2)
+            ; return @@ !%"(%s \\/ %s)" t1' t2'
         | Imp (t1, t2) -> do_
-                ; (t1', t2') <-- (f &&& f) (t1, t2)
-                ; return @@ !%"%s -> %s" t1' t2'
-        | App (Const func, t1) -> do_
-                ; t1' <-- f t1
-                ; return @@ !%"%s(%s)" func t1'
-        | App (App (Const func, t1), t2) -> do_
-                ; (t1', t2') <-- (f &&& f) (t1, t2)
-                ; return @@ !%"%s(%s, %s)" func t1' t2'
-        | App (App (App (Const func, t1), t2), t3) -> do_
-                ; ((t1', t2'), t3') <-- ((f &&& f) &&& f) ((t1, t2), t3)
-                ; return @@ !%"%s(%s, %s, %s)" func t1' t2' t3'
-        | App (App (App (App (Const func, t1), t2), t3), t4) -> do_
-                ; (((t1', t2'), t3'), t4') <-- (((f &&& f) &&& f) &&& f) (((t1, t2), t3), t4)
-                ; return @@ !%"%s(%s, %s, %s, %s)" func t1' t2' t3' t4'
-        | App (t1, t2) -> do_
-                ; (t1', t2') <-- (f &&& f) (t1, t2)
-                ; return @@ !%"%s (%s)" t1' t2'
-        | Lambda (t, ty) ->
-            let var = gen_varname ty in do_
-            ; put_cons var
+            ; (t1', t2') <-- (f &&& f) (t1, t2)
+            ; return @@ !%"%s -> %s" t1' t2'
+        | App _ as t ->
+            let (func, args) = get_args t in
+            let fmt = match func with
+                | Const _ | Var _ -> format_of_string "%s(%s)"
+                | Lambda _ -> format_of_string "(%s)(%s)"
+                | _ -> format_of_string "%s (%s)" in do_
+            ; s <-- get
+            ; func <-- f func
+            ; put s
+            ; args <-- sequence' @@ List.map f args
+            ; return @@ !%fmt func (String.concat ", " args)
+        | Lambda _ as t ->
+            let t, vars = get_lambda_vars t in
+            let vars = List.map gen_varname vars in do_
+            ; st <-- get
+            ; put (vars @ st)
             ; body <-- f t
-            ; return @@ !%"\\%s. (%s)" var body
+            ; return @@ !%"\\%s. %s" (String.concat " " vars) body
         | Exists (t, ty) ->
             let var = gen_varname ty in do_
             ; put_cons var
