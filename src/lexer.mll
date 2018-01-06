@@ -13,7 +13,7 @@ rule token = parse
     { TRUE }
 | "False"
     { FALSE }
-| '~' 
+| '-' | '~'
     { NEG } 
 | '&'
     { CONJ }

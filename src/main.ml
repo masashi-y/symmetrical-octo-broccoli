@@ -10,6 +10,7 @@ let main () =
   try
       let ast = Parser.main Lexer.token filebuf in
     print_endline (Term.show (Term.from_AST ast));
+    print_endline (Term.show (Term.beta_reduce (Term.from_AST ast)));
     print_endline "";
   print_endline (AST.show ast)
   with

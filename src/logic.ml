@@ -102,12 +102,35 @@ module Type = struct
         | _ -> None
 end
 
+type variable = int
 
-module Term = struct
+module Term : sig
+    type t
+
+    val mkTrue : unit -> t
+    val mkFalse : unit -> t
+    val mkVar : unit -> t
+    val mkConst : string -> t
+    val mkNot : t -> t
+    val mkEqual : t -> t -> t
+    val mkAnd : t -> t -> t
+    val mkOr : t -> t -> t
+    val mkImp : t -> t -> t
+    val mkApp : t -> t list -> t
+    val mkLambda : ?ty:Type.t -> t -> t
+    val mkExists : ?ty:Type.t -> t -> t
+    val mkForall : ?ty:Type.t -> t -> t
+
+    val from_AST : AST.t -> t
+    val show : t -> string
+    val shift_indices : variable -> variable -> t -> t
+    val subst : t -> variable -> t -> t
+    val beta_reduce : t -> t
+end = struct
 
     type t = True
            | False
-           | Var of int
+           | Var of variable
            | Const of string
            | Not of t
            | Equal of t * t
@@ -118,6 +141,20 @@ module Term = struct
            | Lambda of (t * Type.t option)
            | Exists of (t * Type.t option)
            | Forall of (t * Type.t option)
+
+    let mkTrue () = True
+    let mkFalse () = False
+    let mkVar () = Var 0
+    let mkConst s = Const s
+    let mkNot t = Not t
+    let mkEqual t1 t2 = Equal (t1, t2)
+    let mkAnd t1 t2 = And (t1, t2)
+    let mkOr t1 t2 = Or (t1, t2)
+    let mkImp t1 t2 = Imp (t1, t2)
+    let mkApp f xs = List.fold_left (fun f x -> App (f, x)) f xs
+    let mkLambda ?ty t = Lambda (t, ty)
+    let mkExists ?ty t = Exists (t, ty)
+    let mkForall ?ty t = Forall (t, ty)
 
     let get_args = 
         let rec aux args = function
@@ -217,17 +254,15 @@ module Term = struct
             let fmt = match func with
                 | Const _ | Var _ -> format_of_string "%s(%s)"
                 | Lambda _ -> format_of_string "(%s)(%s)"
-                | _ -> format_of_string "%s (%s)" in do_
-            ; s <-- get
-            ; func <-- f func
-            ; put s
-            ; args <-- sequence' @@ List.map f args
+                | _ -> format_of_string "%s (%s)" in
+            let g args = sequence' @@ List.map f args in do_
+            ; (func, args) <-- (f &&& g) (func, args)
             ; return @@ !%fmt func (String.concat ", " args)
         | Lambda _ as t ->
             let t, vars = get_lambda_vars t in
-            let vars = List.map gen_varname vars in do_
+            let vars = List.rev_map gen_varname vars in do_
             ; st <-- get
-            ; put (vars @ st)
+            ; put ((List.rev vars) @ st)
             ; body <-- f t
             ; return @@ !%"\\%s. %s" (String.concat " " vars) body
         | Exists (t, ty) ->
@@ -243,5 +278,50 @@ module Term = struct
         )
         in StateM.eval (f t) []
 
+    let rec shift_indices d i = function
+        | Var j          -> if j >= i
+                                then Var (j + d)
+                                else Var j
+        | Not t          -> Not (shift_indices d i t)
+        | Equal (t1, t2) -> Equal (shift_indices d i t1, shift_indices d i t2)
+        | And (t1, t2)   -> And (shift_indices d i t1, shift_indices d i t2)
+        | Or (t1, t2)    -> Or (shift_indices d i t1, shift_indices d i t2)
+        | Imp (t1, t2)   -> Imp (shift_indices d i t1, shift_indices d i t2)
+        | App (t1, t2)   -> App (shift_indices d i t1, shift_indices d i t2)
+        | Lambda (t, ty) -> Lambda (shift_indices d (i + 1) t, ty)
+        | Exists (t, ty) -> Exists (shift_indices d (i + 1) t, ty)
+        | Forall (t, ty) -> Forall (shift_indices d (i + 1) t, ty)
+        | t -> t
+
+    let rec subst l i = function
+        | Var j          -> if j = i
+                                then l
+                                else Var j
+        | Not t          -> Not (subst l i t)
+        | Equal (t1, t2) -> Equal (subst l i t1, subst l i t2)
+        | And (t1, t2)   -> And (subst l i t1, subst l i t2)
+        | Or (t1, t2)    -> Or (subst l i t1, subst l i t2)
+        | Imp (t1, t2)   -> Imp (subst l i t1, subst l i t2)
+        | App (t1, t2)   -> App (subst l i t1, subst l i t2)
+        | Lambda (t, ty) -> Lambda (subst (shift_indices 1 0 l) (i + 1) t, ty)
+        | Exists (t, ty) -> Exists (subst (shift_indices 1 0 l) (i + 1) t, ty)
+        | Forall (t, ty) -> Forall (subst (shift_indices 1 0 l) (i + 1) t, ty)
+        | t -> t
+
+    let rec beta_reduce = function
+        | Not t          -> Not (beta_reduce t)
+        | Equal (t1, t2) -> Equal (beta_reduce t1, beta_reduce t2)
+        | And (t1, t2)   -> And (beta_reduce t1, beta_reduce t2)
+        | Or (t1, t2)    -> Or (beta_reduce t1, beta_reduce t2)
+        | Imp (t1, t2)   -> Imp (beta_reduce t1, beta_reduce t2)
+        | App (t1, t2)   -> begin match beta_reduce t1 with
+            | Lambda (t, ty) -> beta_reduce (shift_indices (-1) 0 (subst (shift_indices 1 0 t2) 0 t))
+            | t -> App (t, beta_reduce t2)
+        end
+        | Lambda (t, ty) -> Lambda (beta_reduce t, ty)
+        | Exists (t, ty) -> Exists (beta_reduce t, ty)
+        | Forall (t, ty) -> Forall (beta_reduce t, ty)
+        | t -> t
 end
+
 
