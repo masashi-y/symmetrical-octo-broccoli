@@ -104,7 +104,7 @@ struct
     let rec sequence x = function
         | [] -> x
         | f::t -> sequence (x >>= f) t
-    let sequence_ m l = sequence m l; ()
+    let sequence_ m l = ignore (sequence m l)
 end
 
 module Option =

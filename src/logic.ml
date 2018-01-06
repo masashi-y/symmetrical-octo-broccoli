@@ -126,6 +126,7 @@ module Term : sig
     val shift_indices : variable -> variable -> t -> t
     val subst : t -> variable -> t -> t
     val beta_reduce : t -> t
+    val normalize : t -> t
 end = struct
 
     type t = True
@@ -321,6 +322,21 @@ end = struct
         | Lambda (t, ty) -> Lambda (beta_reduce t, ty)
         | Exists (t, ty) -> Exists (beta_reduce t, ty)
         | Forall (t, ty) -> Forall (beta_reduce t, ty)
+        | t -> t
+
+    let rec normalize = function
+        | Not t          -> Not (normalize t)
+        | Equal (t1, t2) -> Equal (normalize t1, normalize t2)
+        | And (True, t) | And (t, True) -> normalize t
+        | And (t1, t2)   -> And (normalize t1, normalize t2)
+        | Or (False, t) | Or (t, False) -> normalize t
+        | Or (t1, t2)    -> Or (normalize t1, normalize t2)
+        | Imp (True, t)  -> normalize t
+        | Imp (t1, t2)   -> Imp (normalize t1, normalize t2)
+        | App (t1, t2)   -> App (normalize t1, normalize t2)
+        | Lambda (t, ty) -> Lambda (normalize t, ty)
+        | Exists (t, ty) -> Exists (normalize t, ty)
+        | Forall (t, ty) -> Forall (normalize t, ty)
         | t -> t
 end
 

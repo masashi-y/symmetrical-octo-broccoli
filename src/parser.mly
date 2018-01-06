@@ -24,17 +24,18 @@ lambda :
 | LAMBDA xs=nonempty_list(VAR) PERIOD e=expr6
     { List.fold_right (fun v b -> Lambda (v, b)) xs e }
 
-expr6 :
-| e=lambda { e }
-| e=expr5  { e }
-
-expr5 :
+quantified :
 | n=option(NEG) FORALL x=VAR PERIOD e=expr5
     { match n with Some _ -> Not (Forall (x, e)) | None -> Forall (x, e) }
 | n=option(NEG) EXISTS x=VAR PERIOD e=expr5
     { match n with Some _ -> Not (Exists (x, e)) | None -> Exists (x, e) }
-| e=expr4                     { e }
-                           
+
+expr6 :
+| e=lambda | e=expr5 { e }
+
+expr5 :
+| e=quantified | e=expr4 { e }
+
 expr4 :
 | e1=expr4 IMPL e2=expr3   { Imp (e1, e2) }
 | e=expr3                  { e }
