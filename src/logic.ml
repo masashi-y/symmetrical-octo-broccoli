@@ -180,42 +180,42 @@ end = struct
         let rec f = StateM.(function
         | AST.True  -> return True
         | AST.False -> return False
-        | AST.Term s -> do_
-            ; lst <-- get
-            ; (try let i = List.index s lst in
+        | AST.Term s -> do_;
+            lst <-- get;
+            (try let i = List.index s lst in
                 return @@ Var i
             with Not_found ->
                 return @@ Const s)
-        | AST.Not t -> do_
-            ; t' <-- f t
-            ; return @@ Not t'
-        | AST.Equal (t1, t2) -> do_
-            ; (t1', t2') <-- (f &&& f) (t1, t2)
-            ; return @@ Equal (t1', t2')
-        | AST.And (t1, t2) -> do_
-            ; (t1', t2') <-- (f &&& f) (t1, t2)
-            ; return @@ And (t1', t2')
-        | AST.Or (t1, t2) -> do_
-            ; (t1', t2') <-- (f &&& f) (t1, t2)
-            ; return @@ Or (t1', t2')
-        | AST.Imp (t1, t2) -> do_
-            ; (t1', t2') <-- (f &&& f) (t1, t2)
-            ; return @@ Imp (t1', t2')
-        | AST.App (t1, t2) -> do_
-            ; (t1', t2') <-- (f &&& f) (t1, t2)
-            ; return @@ App (t1', t2')
-        | AST.Lambda (v, t) -> do_
-            ; put_cons v
-            ; t' <-- f t
-            ; return @@ Lambda (t', Type.resolve_atomic v)
-        | AST.Exists (v, t) -> do_
-            ; put_cons v
-            ; t' <-- f t
-            ; return @@ Exists (t', Type.resolve_atomic v)
-        | AST.Forall (v, t) -> do_
-            ; put_cons v
-            ; t' <-- f t
-            ; return @@ Forall (t', Type.resolve_atomic v)
+        | AST.Not t -> do_;
+            t' <-- f t;
+            return @@ Not t'
+        | AST.Equal (t1, t2) -> do_;
+            (t1', t2') <-- (f &&& f) (t1, t2);
+            return @@ Equal (t1', t2')
+        | AST.And (t1, t2) -> do_;
+            (t1', t2') <-- (f &&& f) (t1, t2);
+            return @@ And (t1', t2')
+        | AST.Or (t1, t2) -> do_;
+            (t1', t2') <-- (f &&& f) (t1, t2);
+            return @@ Or (t1', t2')
+        | AST.Imp (t1, t2) -> do_;
+            (t1', t2') <-- (f &&& f) (t1, t2);
+            return @@ Imp (t1', t2')
+        | AST.App (t1, t2) -> do_;
+            (t1', t2') <-- (f &&& f) (t1, t2);
+            return @@ App (t1', t2')
+        | AST.Lambda (v, t) -> do_;
+            put_cons v;
+            t' <-- f t;
+            return @@ Lambda (t', Type.resolve_atomic v)
+        | AST.Exists (v, t) -> do_;
+            put_cons v;
+            t' <-- f t;
+            return @@ Exists (t', Type.resolve_atomic v)
+        | AST.Forall (v, t) -> do_;
+            put_cons v;
+            t' <-- f t;
+            return @@ Forall (t', Type.resolve_atomic v)
         )
         in StateM.eval (f t) []
 
@@ -231,51 +231,51 @@ end = struct
         let rec f = StateM.(function
         | True  -> return "True"
         | False -> return "False"
-        | Var v -> do_
-            ; lst <-- get
-            ; return (List.nth lst v)
+        | Var v -> do_;
+            lst <-- get;
+            return (List.nth lst v)
         | Const s -> return s
-        | Not t -> do_
-            ; t' <-- f t
-            ; return @@ !%"~(%s)" t'
-        | Equal (t1, t2) -> do_
-            ; (t1', t2') <-- (f &&& f) (t1, t2)
-            ; return @@ !%"%s = %s" t1' t2'
-        | And (t1, t2) -> do_
-            ; (t1', t2') <-- (f &&& f) (t1, t2)
-            ; return @@ !%"(%s /\\ %s)" t1' t2'
-        | Or (t1, t2) -> do_
-            ; (t1', t2') <-- (f &&& f) (t1, t2)
-            ; return @@ !%"(%s \\/ %s)" t1' t2'
-        | Imp (t1, t2) -> do_
-            ; (t1', t2') <-- (f &&& f) (t1, t2)
-            ; return @@ !%"%s -> %s" t1' t2'
+        | Not t -> do_;
+            t' <-- f t;
+            return @@ !%"~(%s)" t'
+        | Equal (t1, t2) -> do_;
+            (t1', t2') <-- (f &&& f) (t1, t2);
+            return @@ !%"%s = %s" t1' t2'
+        | And (t1, t2) -> do_;
+            (t1', t2') <-- (f &&& f) (t1, t2);
+            return @@ !%"(%s /\\ %s)" t1' t2'
+        | Or (t1, t2) -> do_;
+            (t1', t2') <-- (f &&& f) (t1, t2);
+            return @@ !%"(%s \\/ %s)" t1' t2'
+        | Imp (t1, t2) -> do_;
+            (t1', t2') <-- (f &&& f) (t1, t2);
+            return @@ !%"%s -> %s" t1' t2'
         | App _ as t ->
             let (func, args) = get_args t in
             let fmt = match func with
                 | Const _ | Var _ -> format_of_string "%s(%s)"
                 | Lambda _ -> format_of_string "(%s)(%s)"
                 | _ -> format_of_string "%s (%s)" in
-            let g args = sequence' @@ List.map f args in do_
-            ; (func, args) <-- (f &&& g) (func, args)
-            ; return @@ !%fmt func (String.concat ", " args)
+            let g args = sequence' @@ List.map f args in do_;
+            (func, args) <-- (f &&& g) (func, args);
+            return @@ !%fmt func (String.concat ", " args)
         | Lambda _ as t ->
             let t, vars = get_lambda_vars t in
-            let vars = List.rev_map gen_varname vars in do_
-            ; st <-- get
-            ; put ((List.rev vars) @ st)
-            ; body <-- f t
-            ; return @@ !%"\\%s. %s" (String.concat " " vars) body
+            let vars = List.rev_map gen_varname vars in do_;
+            st <-- get;
+            put ((List.rev vars) @ st);
+            body <-- f t;
+            return @@ !%"\\%s. %s" (String.concat " " vars) body
         | Exists (t, ty) ->
-            let var = gen_varname ty in do_
-            ; put_cons var
-            ; body <-- f t
-            ; return @@ !%"exists %s. (%s)" var body
+            let var = gen_varname ty in do_;
+            put_cons var;
+            body <-- f t;
+            return @@ !%"exists %s. (%s)" var body
         | Forall (t, ty) ->
-            let var = gen_varname ty in do_
-            ; put_cons var
-            ; body <-- f t
-            ; return @@ !%"forall %s. (%s)" var body
+            let var = gen_varname ty in do_;
+            put_cons var;
+            body <-- f t;
+            return @@ !%"forall %s. (%s)" var body
         )
         in StateM.eval (f t) []
 
