@@ -1,0 +1,13 @@
+(jbuild_version 1)
+
+(ocamllex ((modules (lexer))))
+
+(menhir ((modules (parser))))
+
+(library (
+    (name logic)
+    (preprocess (pps (ppx_monadic)))
+    (libraries (str ppx_monadic))
+))
+
+

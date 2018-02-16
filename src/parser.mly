@@ -1,6 +1,5 @@
 %{
-open Logic
-open Logic.AST
+open Ast
 
 let mkApp f xs = List.fold_left (fun f x -> App (f, x)) f xs
 %}
@@ -13,7 +12,7 @@ let mkApp f xs = List.fold_left (fun f x -> App (f, x)) f xs
 %token LPAREN RPAREN
 %token EOF
 %token <string> VAR
-%start <Logic.AST.t> main
+%start <Ast.t> main
 
 %%
 

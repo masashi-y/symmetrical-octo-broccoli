@@ -1,6 +1,8 @@
 
 open Utils
 
+exception Parse_error of string
+
 module List = struct
     include List
 
@@ -62,36 +64,6 @@ end = struct
     let exec m a = snd (run m a)
 end
 
-module AST = struct
-
-    type t = True
-           | False
-           | Term of string
-           | Not of t
-           | Equal of t * t
-           | And of t * t
-           | Or of t * t
-           | Imp of t * t
-           | App of t * t
-           | Lambda of string * t
-           | Exists of string * t
-           | Forall of string * t
-
-    let rec show = function
-        | True           -> "True"
-        | False          -> "False"
-        | Term s         -> !%"Term (%s)" s
-        | Not t          -> !%"Not (%s)" (show t)
-        | Equal (t1, t2) -> !%"Equal (%s, %s)" (show t1) (show t2)
-        | And (t1, t2)   -> !%"And (%s, %s)" (show t1) (show t2)
-        | Or (t1, t2)    -> !%"Or (%s, %s)" (show t1) (show t2)
-        | Imp (t1, t2)   -> !%"Imp (%s, %s)" (show t1) (show t2)
-        | App (t1, t2)   -> !%"App (%s, %s)" (show t1) (show t2)
-        | Lambda (v, t)  -> !%"Lambda (%s, %s)" (v) (show t)
-        | Exists (v, t)  -> !%"Exists (%s, %s)" (v) (show t)
-        | Forall (v, t)  -> !%"Forall (%s, %s)" (v) (show t)
-end
-
 module Type = struct
     type t = Atom of string
            | Fun of t * t
@@ -121,7 +93,7 @@ module Term : sig
     val mkExists : ?ty:Type.t -> t -> t
     val mkForall : ?ty:Type.t -> t -> t
 
-    val from_AST : AST.t -> t
+    val from_AST : Ast.t -> t
     val show : t -> string
     val shift_indices : variable -> variable -> t -> t
     val subst : t -> variable -> t -> t
@@ -178,41 +150,41 @@ end = struct
 
     let from_AST t =
         let rec f = StateM.(function
-        | AST.True  -> return True
-        | AST.False -> return False
-        | AST.Term s -> do_;
+        | Ast.True  -> return True
+        | Ast.False -> return False
+        | Ast.Term s -> do_;
             lst <-- get;
             (try let i = List.index s lst in
                 return @@ Var i
             with Not_found ->
                 return @@ Const s)
-        | AST.Not t -> do_;
+        | Ast.Not t -> do_;
             t' <-- f t;
             return @@ Not t'
-        | AST.Equal (t1, t2) -> do_;
+        | Ast.Equal (t1, t2) -> do_;
             (t1', t2') <-- (f &&& f) (t1, t2);
             return @@ Equal (t1', t2')
-        | AST.And (t1, t2) -> do_;
+        | Ast.And (t1, t2) -> do_;
             (t1', t2') <-- (f &&& f) (t1, t2);
             return @@ And (t1', t2')
-        | AST.Or (t1, t2) -> do_;
+        | Ast.Or (t1, t2) -> do_;
             (t1', t2') <-- (f &&& f) (t1, t2);
             return @@ Or (t1', t2')
-        | AST.Imp (t1, t2) -> do_;
+        | Ast.Imp (t1, t2) -> do_;
             (t1', t2') <-- (f &&& f) (t1, t2);
             return @@ Imp (t1', t2')
-        | AST.App (t1, t2) -> do_;
+        | Ast.App (t1, t2) -> do_;
             (t1', t2') <-- (f &&& f) (t1, t2);
             return @@ App (t1', t2')
-        | AST.Lambda (v, t) -> do_;
+        | Ast.Lambda (v, t) -> do_;
             put_cons v;
             t' <-- f t;
             return @@ Lambda (t', Type.resolve_atomic v)
-        | AST.Exists (v, t) -> do_;
+        | Ast.Exists (v, t) -> do_;
             put_cons v;
             t' <-- f t;
             return @@ Exists (t', Type.resolve_atomic v)
-        | AST.Forall (v, t) -> do_;
+        | Ast.Forall (v, t) -> do_;
             put_cons v;
             t' <-- f t;
             return @@ Forall (t', Type.resolve_atomic v)
@@ -341,3 +313,18 @@ end = struct
 end
 
 
+let parse str =
+  let filebuf = Lexing.from_string str in
+  try
+    let ast = Parser.main Lexer.token filebuf in
+    Term.from_AST ast
+  with
+  | Lexer.Error msg ->
+      raise (Parse_error msg)
+  | Parser.Error ->
+      raise (Parse_error (!%"At offset %d: syntax error.\n%!" (Lexing.lexeme_start filebuf)))
+
+let parse_option str =
+    try Some (parse str)
+    with
+    | Parse_error _ -> None
